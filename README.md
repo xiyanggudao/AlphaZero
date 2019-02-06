@@ -1,4 +1,4 @@
 ### requirements ###
-python 3.6.2
-tensorflow 1.12.0
-numpy
+- python 3.6.2
+- tensorflow 1.12.0
+- numpy
