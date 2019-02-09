@@ -50,13 +50,16 @@ class Network:
 	def __init__(self, config):
 		self.config = config
 		self.session = None
+		self.graph = None
 		self.inputPlanes = None
 		self.inputPolicyMask = None
+		self.outputProbability = None
+		self.outputValue = None
 		self.predictionProbability = None
 		self.predictionValue = None
-		self.train = None
+		self.trainFunction = None
 
-	def batchNormalization(x):
+	def batchNormalization(self, x):
 		mean, variance = tf.nn.moments(x, [0])
 		return tf.nn.batch_normalization(x, mean, variance, 0, 1, 1e-8)
 
@@ -94,7 +97,7 @@ class Network:
 		# softmax[i] = exp(input[i]) / sum(exp(input))
 		# pickySoftmax[i] = pickySwitch[i]*exp(input[i]) / sum(pickySwitch*exp(input))
 		expVal = tf.math.exp(input) * mask
-		y = expVal / tf.reduce_sum(expVal, 1, keep_dims=True)
+		y = expVal / tf.math.reduce_sum(expVal, 1, keepdims=True)
 		return y
 
 	def AddTanhDenceLayer(self, input, inputSize, outputSize):
@@ -143,43 +146,58 @@ class Network:
 				valueLayer = self.addDenseLayer(valueLayer, valueHiddenLayerSize, self.config.valueHiddenLayerSize)
 				valueHiddenLayerSize = self.config.valueHiddenLayerSize
 			valueLayer = self.AddTanhDenceLayer(valueLayer, valueHiddenLayerSize, 1)
+			valueLayer = tf.reshape(valueLayer, [-1])
 
 			# train variant
 			predictionProbability = tf.placeholder(tf.float32, [None, self.config.outputProbabilitySize])
-			predictionValue = tf.placeholder(tf.float32, [None, 1])
+			predictionValue = tf.placeholder(tf.float32, [None])
 			lossL2 = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
-			loss = tf.math.reduce_sum(tf.math.square(predictionValue - valueLayer))\
-				- tf.math.reduce_sum(predictionProbability * tf.math.log(policyLayer))\
-				+ self.config.cOfLoss * tf.math.reduce_sum(lossL2)
+			loss = tf.math.reduce_mean(tf.math.square(predictionValue - valueLayer))\
+				- tf.math.reduce_mean(predictionProbability * tf.math.log(policyLayer))\
+				+ self.config.cOfLoss * tf.math.reduce_mean(lossL2)
 			train = tf.train.GradientDescentOptimizer(self.config.learningRate).minimize(loss)
 
 			session = tf.Session(graph=graph)
 		self.session = session
+		self.graph = graph
 		self.inputPlanes = inputLayer
 		self.inputPolicyMask = inputPolicyMaskLayer
+		self.outputProbability = policyLayer
+		self.outputValue = valueLayer
 		self.predictionProbability = predictionProbability
 		self.predictionValue = predictionValue
-		self.train = train
+		self.trainFunction = train
 
 	def buildNetwork(self):
 		assert self.config
 		self.createNetworkGraph()
-		if self.config.modelFilePath and os.path.exists(self.config.modelFilePath):
+		if self.config.modelFilePath and os.path.exists(os.path.dirname(self.config.modelFilePath)):
 			self.load()
 		else:
-			self.session.run(tf.global_variables_initializer())
+			with self.graph.as_default():
+				self.session.run(tf.global_variables_initializer())
 			if self.config.modelFilePath:
 				self.save()
 
 	def save(self):
 		assert self.config and self.config.modelFilePath
-		saver = tf.train.Saver()
-		saver.save(self.session, self.config.modelFilePath)
+		with self.graph.as_default():
+			saver = tf.train.Saver()
+			saver.save(self.session, self.config.modelFilePath)
 
 	def load(self):
 		assert self.config and self.config.modelFilePath
-		saver = tf.train.Saver()
-		saver.restore(self.session, self.config.modelFilePath)
+		with self.graph.as_default():
+			saver = tf.train.Saver()
+			saver.restore(self.session, self.config.modelFilePath)
+
+	def run(self, inputPlanes, inputPolicyMask):
+		feed = {
+			self.inputPlanes: [inputPlanes],
+			self.inputPolicyMask: [inputPolicyMask],
+		}
+		result = self.session.run({'P': self.outputProbability, 'v': self.outputValue}, feed_dict = feed)
+		return result['P'][0], result['v'][0]
 
 	def train(self, inputPlanes, inputPolicyMask, predictionProbability, predictionValue):
 		feed = {
@@ -188,5 +206,5 @@ class Network:
 			self.predictionProbability: predictionProbability,
 			self.predictionValue: predictionValue,
 		}
-		self.session.run(self.train, feed_dict = feed)
+		self.session.run(self.trainFunction, feed_dict = feed)
 

@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 
 
 class MCTEdge:
@@ -28,35 +29,37 @@ class MCTNode:
 	def __init__(self, actions, P, v, parentEdge = None):
 		self.v = v
 		self.parentEdge = parentEdge
-		self.edges = []
-		for i in range(len(P)):
-			self.edges[i] = MCTEdge(self, actions[i], P[i])
+		self.edgeSize = len(P)
+		self.edges = {} # a dict instead of list, to save memory
+		for i in range(self.edgeSize):
+			if P[i] > 0.:
+				self.edges[i] = MCTEdge(self, actions[i], P[i])
 
 	def U(self, Cpuct):
 		sumN = 0
-		for edge in self.edges:
+		for edge in self.edges.values():
 			sumN += edge.N
 		sqrtSumN = sumN ** 0.5
-		returnValue = np.empty(len(self.edges), np.float32)
-		for i in range(len(self.edges)):
+		returnValue = np.zeros(self.edgeSize, np.float32)
+		for i in self.edges:
 			returnValue[i] = Cpuct * self.edges[i].P * sqrtSumN / (1 + self.edges[i].N)
 		return returnValue
 
 	def Pi(self, temperature):
 		sumN = 0
 		exp = 1 / temperature
-		for edge in self.edges:
+		for edge in self.edges.values():
 			sumN += edge.N ** exp
-		returnValue = np.empty(len(self.edges), np.float32)
-		for i in range(len(self.edges)):
+		returnValue = np.zeros(self.edgeSize, np.float32)
+		for i in self.edges:
 			returnValue[i] = self.edges[i].N ** exp / sumN
 		return returnValue
 
 	def select(self, Cpuct, eps = 1E-8):
-		maxActionValue = 0
+		maxActionValue = -1
 		maxActionValueEdge = None
 		U = self.U(Cpuct)
-		for i in range(len(self.edges)):
+		for i in self.edges:
 			actionValue = U[i] + self.edges[i].Q
 			if maxActionValue + eps < actionValue:
 				maxActionValue = actionValue
@@ -64,14 +67,21 @@ class MCTNode:
 		return maxActionValueEdge
 
 
+class MCTSConfig:
+
+	def __init__(self):
+		self.Cpuct = 0.5
+		self.temperature = 1
+		self.maxNodes = 2**14
+
+
 class MCTS:
 
-	def __init__(self, game, Cpuct=0.5, temperature=1):
+	def __init__(self, game, config):
 		self.game = game
 		self.nodeCount = 0
 		self.rootNode = None
-		self.Cpuct = Cpuct
-		self.temperature = temperature
+		self.config = config
 
 	def getNodeCount(self):
 		return self.nodeCount
@@ -89,7 +99,7 @@ class MCTS:
 		return newNode
 
 	def expandNode(self, node):
-		edge = node.select(self.Cpuct)
+		edge = node.select(self.config.Cpuct)
 		if not edge:
 			return None
 		self.game.takeAction(edge.action)
@@ -103,7 +113,7 @@ class MCTS:
 
 	def expand(self):
 		if self.rootNode:
-			newNode = self.expandNode(self.root, self.game)
+			newNode = self.expandNode(self.rootNode)
 		else:
 			self.rootNode = self.createNewNode()
 			newNode = self.rootNode
@@ -112,14 +122,24 @@ class MCTS:
 			return True
 		return False
 
+	def expandMaxNodes(self):
+		print('.', end='')
+		sys.stdout.flush()
+		newNodeCount = 0
+		while self.getNodeCount() < self.config.maxNodes:
+			if not self.expand():
+				break
+			newNodeCount += 1
+		return newNodeCount
+
 	def Pi(self):
 		if self.rootNode:
-			return self.rootNode(self.temperature)
+			return self.rootNode.Pi(self.config.temperature)
 		else:
 			return None
 
 	def play(self, actionIndex):
-		if not self.rootNode or actionIndex < 0 or actionIndex > len(self.rootNode.edges):
+		if not self.rootNode or actionIndex not in self.rootNode.edges:
 			return None
 		edge = self.rootNode.edges[actionIndex]
 		self.game.takeAction(edge.action)
@@ -127,3 +147,8 @@ class MCTS:
 		self.rootNode.parentEdge = None # release other old branches
 		self.nodeCount = edge.N
 		return edge.action
+
+	def reset(self):
+		self.rootNode = None
+		self.nodeCount = 0
+		self.game.reset()
