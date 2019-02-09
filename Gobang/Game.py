@@ -39,7 +39,10 @@ class Game(AlphaZero.Game.Game):
 
     # get (P, v) of current game state
     def getEvaluation(self):
-        return self.network.run(self.getInputPlanes(), self.getInputPolicyMask())
+        mask = self.getInputPolicyMask()
+        if self.isTerminated():
+            return np.zeros(mask.shape), self.getTerminateValue()
+        return self.network.run(self.getInputPlanes(), mask)
 
     # get actions of current game state, can be list or dict with index key
     def getActions(self):

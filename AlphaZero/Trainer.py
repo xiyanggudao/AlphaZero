@@ -6,7 +6,7 @@ import sys
 class TrainConfig:
 
     def __init__(self):
-        self.batchSize = 64
+        self.batchSize = 128
         self.maxBatchs = 2**16
         self.maxGames = 2**14
         self.modelSaveBatchs = 10
@@ -29,7 +29,10 @@ class Trainer:
         self.trainConfig = trainConfig
 
     def selectActionIndex(self, Pi):
-        return np.random.choice(len(Pi), p=Pi)
+        try:
+            return np.random.choice(len(Pi), p=Pi)
+        except:
+            print(Pi)
 
     def selfPlay(self):
         dataOneGame = []
@@ -79,7 +82,7 @@ class Trainer:
                 trainDataQueue.put(data)
             # train
             while trainDataQueue.qsize() >= self.trainConfig.batchSize:
-                print('.', end='')
+                print('train start', end='')
                 sys.stdout.flush()
                 batchCount += 1
                 inputPlanes, inputPolicyMask, predictionProbability, predictionValue = self.getBatchData(trainDataQueue)
@@ -88,6 +91,6 @@ class Trainer:
                     self.network.save()
                     print('save', end='')
                     sys.stdout.flush()
-                print('.', end='')
+                print('train end', end='')
                 sys.stdout.flush()
 

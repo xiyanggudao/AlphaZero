@@ -32,7 +32,7 @@ class MCTNode:
 		self.edgeSize = len(P)
 		self.edges = {} # a dict instead of list, to save memory
 		for i in range(self.edgeSize):
-			if P[i] > 0.:
+			if P[i] > 0:
 				self.edges[i] = MCTEdge(self, actions[i], P[i])
 
 	def U(self, Cpuct):
@@ -50,6 +50,7 @@ class MCTNode:
 		exp = 1 / temperature
 		for edge in self.edges.values():
 			sumN += edge.N ** exp
+		assert sumN != 0
 		returnValue = np.zeros(self.edgeSize, np.float32)
 		for i in self.edges:
 			returnValue[i] = self.edges[i].N ** exp / sumN
@@ -144,7 +145,8 @@ class MCTS:
 		edge = self.rootNode.edges[actionIndex]
 		self.game.takeAction(edge.action)
 		self.rootNode = edge.childNode
-		self.rootNode.parentEdge = None # release other old branches
+		if self.rootNode:
+			self.rootNode.parentEdge = None # release other old branches
 		self.nodeCount = edge.N
 		return edge.action
 

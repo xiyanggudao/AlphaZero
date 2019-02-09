@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 import os
 
 
@@ -192,12 +193,17 @@ class Network:
 			saver.restore(self.session, self.config.modelFilePath)
 
 	def run(self, inputPlanes, inputPolicyMask):
+		assert np.sum(inputPolicyMask) != 0
 		feed = {
 			self.inputPlanes: [inputPlanes],
 			self.inputPolicyMask: [inputPolicyMask],
 		}
 		result = self.session.run({'P': self.outputProbability, 'v': self.outputValue}, feed_dict = feed)
-		return result['P'][0], result['v'][0]
+		P = result['P'][0]
+		v = result['v'][0]
+		sumP = np.sum(P)
+		assert np.abs(sumP-1) < 1E-6
+		return P, v
 
 	def train(self, inputPlanes, inputPolicyMask, predictionProbability, predictionValue):
 		feed = {

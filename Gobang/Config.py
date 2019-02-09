@@ -15,6 +15,7 @@ def createNetworkConfig():
 
 def createMCTSConfig():
     config = MCTSConfig()
+    config.maxNodes = 2**10
     return config
 
 def createTrainConfig():
