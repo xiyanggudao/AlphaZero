@@ -18,7 +18,8 @@ class NetworkConfig:
 		self.outputProbabilitySize = 0
 
 		# a parameter controlling the level of L2 weight regularisation in loss function
-		self.cOfLoss = 1E-4
+		self.cOfL2Loss = 1E-6
+		self.cOfPolicyLoss = 1
 
 		# network parameters
 		self.residualBlocks = 8
@@ -32,7 +33,7 @@ class NetworkConfig:
 		self.valueHiddenLayerSize = 64
 
 		# train parameters
-		self.learningRate = 1E-4
+		self.learningRate = 1E-2
 
 	def setInputPlane(self, planeLayers, planeRows, planeColumns):
 		self.inputPlaneLayers = planeLayers
@@ -70,6 +71,13 @@ class Network:
 		z = tf.nn.conv2d(input, weights, strides=[1, 1, 1, 1], padding='SAME')
 		normal = self.batchNormalization(z) + bias
 		y = tf.nn.relu(normal)
+
+		tf.summary.histogram("params/weight" + str(self.layer_cnt), weights)
+		tf.summary.histogram("params/bias" + str(self.layer_cnt), bias)
+		tf.summary.histogram("res/z" + str(self.layer_cnt), z)
+		tf.summary.histogram("res/znorm" + str(self.layer_cnt), normal)
+		self.layer_cnt += 1
+
 		return y
 
 	def addResidualConvolutionBlock(self, input, channels, kSize):
@@ -79,6 +87,13 @@ class Network:
 		z = tf.nn.conv2d(layer1, weights, strides=[1, 1, 1, 1], padding='SAME')
 		normal = self.batchNormalization(z) + bias
 		y = tf.nn.relu(normal + input)
+
+		tf.summary.histogram("params/weight" + str(self.layer_cnt), weights)
+		tf.summary.histogram("params/bias" + str(self.layer_cnt), bias)
+		tf.summary.histogram("res/z" + str(self.layer_cnt), z)
+		tf.summary.histogram("res/znorm" + str(self.layer_cnt), normal)
+		self.layer_cnt += 1
+
 		return y
 
 	def addPureDenseLayer(self, input, inputSize, outputSize):
@@ -87,6 +102,13 @@ class Network:
 		z = tf.matmul(input, weights)
 		normal = self.batchNormalization(z) + bias
 		y = normal
+
+		tf.summary.histogram("params/weight" + str(self.layer_cnt), weights)
+		tf.summary.histogram("params/bias" + str(self.layer_cnt), bias)
+		tf.summary.histogram("res/z" + str(self.layer_cnt), z)
+		tf.summary.histogram("res/znorm" + str(self.layer_cnt), normal)
+		self.layer_cnt += 1
+
 		return y
 
 	def addDenseLayer(self, input, inputSize, outputSize):
@@ -97,8 +119,13 @@ class Network:
 	def addSoftmaxLayer(self, input, mask):
 		# softmax[i] = exp(input[i]) / sum(exp(input))
 		# pickySoftmax[i] = pickySwitch[i]*exp(input[i]) / sum(pickySwitch*exp(input))
+		self.debug = input
 		expVal = tf.math.exp(input) * mask
 		y = expVal / tf.math.reduce_sum(expVal, 1, keepdims=True)
+
+		tf.summary.histogram("res/softmax" + str(self.layer_cnt), y)
+		self.layer_cnt += 1
+
 		return y
 
 	def AddTanhDenceLayer(self, input, inputSize, outputSize):
@@ -106,10 +133,18 @@ class Network:
 		bias = tf.Variable(tf.random.normal([1, outputSize]))
 		z = tf.matmul(input, weights) + bias
 		y = tf.nn.tanh(z)
+
+		tf.summary.histogram("params/weight" + str(self.layer_cnt), weights)
+		tf.summary.histogram("params/bias" + str(self.layer_cnt), bias)
+		tf.summary.histogram("res/z" + str(self.layer_cnt), z)
+		tf.summary.histogram("res/tanh" + str(self.layer_cnt), y)
+		self.layer_cnt += 1
+
 		return y
 
 	def createNetworkGraph(self):
 		assert self.config
+		self.layer_cnt = 0
 		graph = tf.Graph()
 		with graph.as_default():
 			# input layer
@@ -153,10 +188,27 @@ class Network:
 			predictionProbability = tf.placeholder(tf.float32, [None, self.config.outputProbabilitySize])
 			predictionValue = tf.placeholder(tf.float32, [None])
 			lossL2 = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
-			loss = tf.math.reduce_mean(tf.math.square(predictionValue - valueLayer))\
-				- tf.math.reduce_mean(predictionProbability * tf.math.log(policyLayer))\
-				+ self.config.cOfLoss * tf.math.reduce_mean(lossL2)
+			lossL2 = tf.math.reduce_mean(lossL2)
+			self.lossL2 = lossL2
+			lossValue = tf.math.reduce_mean(tf.math.square(predictionValue - valueLayer))
+			self.lossValue = lossValue
+			lossPolicy = predictionProbability * tf.math.log(tf.clip_by_value(policyLayer, 1E-8, 1))
+			lossPolicy = - tf.math.reduce_mean(tf.math.reduce_sum(lossPolicy, 1))
+			self.lossPolicy = lossPolicy
+			self.lossPolicy2 = predictionProbability * tf.math.log(policyLayer)
+			lossPolicy = self.config.cOfPolicyLoss * lossPolicy
+			lossL2 = self.config.cOfL2Loss * lossL2
+			loss = lossValue + lossPolicy + lossL2
 			train = tf.train.GradientDescentOptimizer(self.config.learningRate).minimize(loss)
+
+			# summary
+			tf.summary.scalar('loss', loss)
+			tf.summary.scalar('lossValue', lossValue)
+			tf.summary.scalar('lossPolicy', loss)
+			tf.summary.scalar('lossL2', lossL2)
+			self.summaryOp = tf.summary.merge_all()
+			self.summary_writer = tf.summary.FileWriter('logs')
+			self.trainCount = 0
 
 			session = tf.Session(graph=graph)
 		self.session = session
@@ -202,6 +254,9 @@ class Network:
 		P = result['P'][0]
 		v = result['v'][0]
 		sumP = np.sum(P)
+		if not (np.abs(sumP-1) < 1E-6):
+			print(P)
+			print(self.session.run(self.debug, feed_dict = feed))
 		assert np.abs(sumP-1) < 1E-6
 		return P, v
 
@@ -212,5 +267,23 @@ class Network:
 			self.predictionProbability: predictionProbability,
 			self.predictionValue: predictionValue,
 		}
-		self.session.run(self.trainFunction, feed_dict = feed)
+		#print('')
+		#print(inputPolicyMask)
+		#print(predictionProbability)
+		#print(inputPolicyMask)
+		'''
+		r0 = self.session.run({'l2':self.lossL2,'p':self.lossPolicy, 'po':self.outputProbability,'v':self.lossValue}, feed_dict = feed)
+		r = self.session.run(
+			{'p2': self.lossPolicy2, 'po': self.outputProbability,
+			 'd': self.debug}, feed_dict=feed)
+		for i in range(5):
+			for j in range(19*19):
+				if np.isnan(r['p2'][i][j]):
+					print(i, j, inputPolicyMask[i][j], predictionProbability[i][j], r['po'][i][j], r['d'][i][j])
+
+		print(r0)
+		'''
+		result = self.session.run({'train':self.trainFunction, 'summary':self.summaryOp}, feed_dict = feed)
+		self.summary_writer.add_summary(result['summary'], self.trainCount)
+		self.trainCount += 1
 

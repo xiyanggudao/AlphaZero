@@ -1,6 +1,7 @@
-import queue
+import multiprocessing
 import numpy as np
 import sys
+import os
 
 
 class TrainConfig:
@@ -8,8 +9,7 @@ class TrainConfig:
     def __init__(self):
         self.batchSize = 128
         self.maxBatchs = 2**16
-        self.maxGames = 2**14
-        self.modelSaveBatchs = 10
+        self.modelSaveBatchs = 8
 
 
 class TrainData:
@@ -34,7 +34,7 @@ class Trainer:
         except:
             print(Pi)
 
-    def selfPlay(self):
+    def selfPlay(self, queue):
         dataOneGame = []
         self.MCTS.reset()
         while not self.MCTS.game.isTerminated():
@@ -55,7 +55,8 @@ class Trainer:
         for data in dataOneGame:
             data.predictionValue = resultValue
             resultValue = -resultValue
-        return dataOneGame
+        for data in dataOneGame:
+            queue.put(data)
 
     def getBatchData(self, queue):
         inputPlanes = []
@@ -70,22 +71,22 @@ class Trainer:
             predictionValue.append(data.predictionValue)
         return inputPlanes, inputPolicyMask, predictionProbability, predictionValue
 
-    def run(self):
-        trainDataQueue = queue.Queue()
+    def run(self, selfPlayDataGenerate):
+        processCount = os.cpu_count()
+        trainDataQueue = multiprocessing.Queue(self.trainConfig.batchSize*processCount)
         batchCount = 0
-        gameCount = 0
-        while batchCount < self.trainConfig.maxBatchs and gameCount < self.trainConfig.maxGames:
-            # generate data by self play
-            dataOneGame = self.selfPlay()
-            gameCount += 1
-            for data in dataOneGame:
-                trainDataQueue.put(data)
-            # train
-            while trainDataQueue.qsize() >= self.trainConfig.batchSize:
+        # generate data by self play
+        processPool = []
+        for i in range(processCount):
+            processPool.append(multiprocessing.Process(target=selfPlayDataGenerate, args=(trainDataQueue,)))
+            processPool[-1].start()
+        try:
+            while batchCount < self.trainConfig.maxBatchs:
+                # train
+                inputPlanes, inputPolicyMask, predictionProbability, predictionValue = self.getBatchData(trainDataQueue)
                 print('train start', end='')
                 sys.stdout.flush()
                 batchCount += 1
-                inputPlanes, inputPolicyMask, predictionProbability, predictionValue = self.getBatchData(trainDataQueue)
                 self.network.train(inputPlanes, inputPolicyMask, predictionProbability, predictionValue)
                 if batchCount % self.trainConfig.modelSaveBatchs == 0:
                     self.network.save()
@@ -93,4 +94,7 @@ class Trainer:
                     sys.stdout.flush()
                 print('train end', end='')
                 sys.stdout.flush()
+        finally:
+            for i in range(processCount):
+                processPool[i].terminate()
 
