@@ -119,7 +119,6 @@ class Network:
 	def addSoftmaxLayer(self, input, mask):
 		# softmax[i] = exp(input[i]) / sum(exp(input))
 		# pickySoftmax[i] = pickySwitch[i]*exp(input[i]) / sum(pickySwitch*exp(input))
-		self.debug = input
 		expVal = tf.math.exp(input) * mask
 		y = expVal / tf.math.reduce_sum(expVal, 1, keepdims=True)
 
@@ -189,13 +188,9 @@ class Network:
 			predictionValue = tf.placeholder(tf.float32, [None])
 			lossL2 = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
 			lossL2 = tf.math.reduce_mean(lossL2)
-			self.lossL2 = lossL2
 			lossValue = tf.math.reduce_mean(tf.math.square(predictionValue - valueLayer))
-			self.lossValue = lossValue
 			lossPolicy = predictionProbability * tf.math.log(tf.clip_by_value(policyLayer, 1E-8, 1))
 			lossPolicy = - tf.math.reduce_mean(tf.math.reduce_sum(lossPolicy, 1))
-			self.lossPolicy = lossPolicy
-			self.lossPolicy2 = predictionProbability * tf.math.log(policyLayer)
 			lossPolicy = self.config.cOfPolicyLoss * lossPolicy
 			lossL2 = self.config.cOfL2Loss * lossL2
 			loss = lossValue + lossPolicy + lossL2
@@ -204,7 +199,7 @@ class Network:
 			# summary
 			tf.summary.scalar('loss', loss)
 			tf.summary.scalar('lossValue', lossValue)
-			tf.summary.scalar('lossPolicy', loss)
+			tf.summary.scalar('lossPolicy', lossPolicy)
 			tf.summary.scalar('lossL2', lossL2)
 			self.summaryOp = tf.summary.merge_all()
 			self.summary_writer = tf.summary.FileWriter('logs')
@@ -254,9 +249,6 @@ class Network:
 		P = result['P'][0]
 		v = result['v'][0]
 		sumP = np.sum(P)
-		if not (np.abs(sumP-1) < 1E-6):
-			print(P)
-			print(self.session.run(self.debug, feed_dict = feed))
 		assert np.abs(sumP-1) < 1E-6
 		return P, v
 
@@ -267,22 +259,6 @@ class Network:
 			self.predictionProbability: predictionProbability,
 			self.predictionValue: predictionValue,
 		}
-		#print('')
-		#print(inputPolicyMask)
-		#print(predictionProbability)
-		#print(inputPolicyMask)
-		'''
-		r0 = self.session.run({'l2':self.lossL2,'p':self.lossPolicy, 'po':self.outputProbability,'v':self.lossValue}, feed_dict = feed)
-		r = self.session.run(
-			{'p2': self.lossPolicy2, 'po': self.outputProbability,
-			 'd': self.debug}, feed_dict=feed)
-		for i in range(5):
-			for j in range(19*19):
-				if np.isnan(r['p2'][i][j]):
-					print(i, j, inputPolicyMask[i][j], predictionProbability[i][j], r['po'][i][j], r['d'][i][j])
-
-		print(r0)
-		'''
 		result = self.session.run({'train':self.trainFunction, 'summary':self.summaryOp}, feed_dict = feed)
 		self.summary_writer.add_summary(result['summary'], self.trainCount)
 		self.trainCount += 1
