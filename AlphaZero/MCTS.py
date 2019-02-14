@@ -4,12 +4,13 @@ import sys
 
 class MCTEdge:
 
-	def __init__(self, parentNode, action, P):
+	def __init__(self, parentNode, index, action, P):
 		self.W = 0
 		self.N = 0
 		self.Q = 0
 		self.P = P
 		self.action = action
+		self.index = index
 		self.parentNode = parentNode
 		self.childNode = None
 
@@ -30,41 +31,47 @@ class MCTNode:
 		self.v = v
 		self.parentEdge = parentEdge
 		self.edgeSize = len(P)
-		self.edges = {} # a dict instead of list, to save memory
+		self.edges = []
 		for i in range(self.edgeSize):
 			if P[i] > 0:
-				self.edges[i] = MCTEdge(self, actions[i], P[i])
+				self.edges.append(MCTEdge(self, i, actions[i], P[i]))
+
+	def getEdge(self, actionIndex):
+		for edge in self.edges:
+			if edge.index == actionIndex:
+				return edge
+		return None
 
 	def U(self, Cpuct):
-		sumN = 1 # 1 is better than 0 when maxNodes is low
-		for edge in self.edges.values():
+		sumN = 1E-8 # eps is better than 0 when maxNodes is low
+		for edge in self.edges:
 			sumN += edge.N
 		sqrtSumN = sumN ** 0.5
 		returnValue = np.zeros(self.edgeSize, np.float32)
-		for i in self.edges:
-			returnValue[i] = Cpuct * self.edges[i].P * sqrtSumN / (1 + self.edges[i].N)
+		for edge in self.edges:
+			returnValue[edge.index] = Cpuct * edge.P * sqrtSumN / (1 + edge.N)
 		return returnValue
 
 	def Pi(self, temperature):
 		sumN = 0
 		exp = 1 / temperature
-		for edge in self.edges.values():
+		for edge in self.edges:
 			sumN += edge.N ** exp
 		assert sumN != 0
 		returnValue = np.zeros(self.edgeSize, np.float32)
-		for i in self.edges:
-			returnValue[i] = self.edges[i].N ** exp / sumN
+		for edge in self.edges:
+			returnValue[edge.index] = edge.N ** exp / sumN
 		return returnValue
 
-	def select(self, Cpuct, eps = 1E-8):
+	def select(self, Cpuct):
 		maxActionValue = -1
 		maxActionValueEdge = None
 		U = self.U(Cpuct)
-		for i in self.edges:
-			actionValue = U[i] + self.edges[i].Q
-			if maxActionValue + eps < actionValue:
+		for edge in self.edges:
+			actionValue = U[edge.index] + edge.Q
+			if maxActionValue < actionValue:
 				maxActionValue = actionValue
-				maxActionValueEdge = self.edges[i]
+				maxActionValueEdge = edge
 		return maxActionValueEdge
 
 
@@ -140,9 +147,11 @@ class MCTS:
 			return None
 
 	def play(self, actionIndex):
-		if not self.rootNode or actionIndex not in self.rootNode.edges:
+		if not self.rootNode:
 			return None
-		edge = self.rootNode.edges[actionIndex]
+		edge = self.rootNode.getEdge(actionIndex)
+		if edge is None:
+			return None
 		self.game.takeAction(edge.action)
 		self.rootNode = edge.childNode
 		if self.rootNode:

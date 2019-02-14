@@ -60,10 +60,10 @@ def networkAction():
 		mcts.expand()
 	actionIndex = -1
 	maxP = -1
-	for i in mcts.rootNode.edges:
-		if maxP < mcts.rootNode.edges[i].P:
-			actionIndex = i
-			maxP = mcts.rootNode.edges[i].P
+	for edge in mcts.rootNode.edges:
+		if maxP < edge.P:
+			actionIndex = edge.index
+			maxP = edge.P
 	if actionIndex >= 0:
 		action(actionIndex)
 
@@ -77,8 +77,8 @@ def printPv():
 		mcts.expand()
 	board.refresh()
 	board.printValue("%0.4f"%mcts.rootNode.v)
-	for i in mcts.rootNode.edges:
-		board.printValue("%d"%(mcts.rootNode.edges[i].P*1000), mcts.rootNode.edges[i].action)
+	for edge in mcts.rootNode.edges:
+		board.printValue("%d"%(edge.P*1000), edge.action)
 
 def printPi():
 	global game
@@ -92,7 +92,7 @@ def printPi():
 	Pi = mcts.Pi()
 	for i in range(len(Pi)):
 		if Pi[i] != 0:
-			board.printValue("%d"%(Pi[i]*1000), mcts.rootNode.edges[i].action)
+			board.printValue("%d"%(Pi[i]*1000), mcts.rootNode.getEdge(i).action)
 
 def printN():
 	global game
@@ -103,8 +103,8 @@ def printN():
 	if not mcts.rootNode:
 		mcts.expand()
 	board.refresh()
-	for i in mcts.rootNode.edges:
-		board.printValue("%d"%mcts.rootNode.edges[i].N, mcts.rootNode.edges[i].action)
+	for edge in mcts.rootNode.edges:
+		board.printValue("%d"%edge.N, edge.action)
 
 
 def onKey(event):
@@ -153,8 +153,6 @@ network.buildNetwork()
 game = Game(network)
 mcts = MCTS(game, config.createMCTSConfig())
 
-mcts.expandMaxNodes()
-'''
 rootWindow = tkinter.Tk()
 cv = tkinter.Canvas(rootWindow)
 board = Chessboard(cv)
@@ -168,4 +166,3 @@ refreshBoard()
 
 cv.pack(fill=tkinter.BOTH, expand=1)
 rootWindow.mainloop()
-'''
