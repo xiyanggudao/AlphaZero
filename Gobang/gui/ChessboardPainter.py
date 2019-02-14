@@ -44,4 +44,9 @@ class ChessboardPainter:
 
 		self.__canvas.create_oval(left, top, right, bottom, fill=self.__chessColor,tag='x')
 
+	def drawText(self, x, y, text, color):
+		textSize = int(0.5 * self.__chessSize)
+		font = '-family 隶书 -size %d' % textSize
+		self.__canvas.create_text((x, y), text=text, fill=color, font=font,tag='x')
+
 

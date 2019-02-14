@@ -36,7 +36,7 @@ class MCTNode:
 				self.edges[i] = MCTEdge(self, actions[i], P[i])
 
 	def U(self, Cpuct):
-		sumN = 0
+		sumN = 1 # 1 is better than 0 when maxNodes is low
 		for edge in self.edges.values():
 			sumN += edge.N
 		sqrtSumN = sumN ** 0.5

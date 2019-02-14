@@ -18,7 +18,7 @@ class NetworkConfig:
 		self.outputProbabilitySize = 0
 
 		# a parameter controlling the level of L2 weight regularisation in loss function
-		self.cOfL2Loss = 1E-6
+		self.cOfL2Loss = 1E-4
 		self.cOfPolicyLoss = 1
 
 		# network parameters
@@ -186,8 +186,7 @@ class Network:
 			# train variant
 			predictionProbability = tf.placeholder(tf.float32, [None, self.config.outputProbabilitySize])
 			predictionValue = tf.placeholder(tf.float32, [None])
-			lossL2 = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
-			lossL2 = tf.math.reduce_mean(lossL2)
+			lossL2 = tf.math.reduce_mean([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
 			lossValue = tf.math.reduce_mean(tf.math.square(predictionValue - valueLayer))
 			lossPolicy = predictionProbability * tf.math.log(tf.clip_by_value(policyLayer, 1E-8, 1))
 			lossPolicy = - tf.math.reduce_mean(tf.math.reduce_sum(lossPolicy, 1))

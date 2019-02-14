@@ -11,7 +11,7 @@ class Chessboard:
 		self.__painter.setBoardColor('grey')
 
 		self.__posCalculator = PositionCalculator()
-		self.__posCalculator.setChessmanSpacing(5)
+		self.__posCalculator.setChessmanSpacing(3)
 
 		self.__chessmenOnBoard = []
 
@@ -74,18 +74,20 @@ class Chessboard:
 		self.__painter.drawDisk(x4,y4, radius)
 		self.__painter.drawDisk(x5,y5, radius)
 
-	def __drawChessman(self, chess):
-		color = '#000000' if chess[0] == 0 else '#ffffff'
+	def __drawChessman(self, pos, activeColor, step):
+		chessColors = ['#000000', '#ffffff']
+		color = chessColors[activeColor]
+		oppositeColor = chessColors[activeColor ^ 1]
 		self.__painter.setChessColor(color)
-		x, y = self.__positionAtScreen(chess[1], chess[2])
+		x, y = self.__positionAtScreen(pos[0], pos[1])
 		self.__painter.drawChess(x, y)
+		self.__painter.drawText(x, y, str(step), oppositeColor)
 
 	def __drawChessmen(self):
-		for i in range(19):
-			for j in range(19):
-				for c in range(2):
-					if self.__chessmenOnBoard[c][i][j]:
-						self.__drawChessman((c, i, j))
+		color = 0
+		for i in range(len(self.__chessmenOnBoard)):
+			self.__drawChessman(self.__chessmenOnBoard[i], color, i+1)
+			color ^= 1
 
 	def minimumSize(self):
 		return self.__posCalculator.boardSizeForFixedChessmanSize(30)
@@ -99,3 +101,10 @@ class Chessboard:
 		self.__drawGrid()
 		self.__drawPoint()
 		self.__drawChessmen()
+
+	def printValue(self, text, pos=None):
+		if pos:
+			x, y = self.__positionAtScreen(pos[0], pos[1])
+		else:
+			x = y = self.__posCalculator.chessmanSize()
+		self.__painter.drawText(x, y, text, '#ffffff')

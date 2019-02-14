@@ -20,10 +20,10 @@ class Game(AlphaZero.Game.Game):
     def isPlayerWins(self, playerColor):
         for i in range(19):
             for j in range(19):
-                isSerialRow = True
-                isSerialCol = True
-                isSerialDiagLeft = True
-                isSerialDiagRight = True
+                isSerialRow = True if j+4 < 19 else False
+                isSerialCol = True if i+4 < 19 else False
+                isSerialDiagLeft = True if i+4 < 19 and j-4 >= 0 else False
+                isSerialDiagRight = True if i+4 < 19 and j+4 < 19 else False
                 for k in range(5):
                     if j+k < 19 and self.chessBoard[playerColor][i][j+k] == 0:
                         isSerialRow = False
