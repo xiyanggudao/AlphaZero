@@ -202,7 +202,6 @@ class Network:
 			tf.summary.scalar('lossL2', lossL2)
 			self.summaryOp = tf.summary.merge_all()
 			self.summary_writer = tf.summary.FileWriter('logs')
-			self.trainCount = 0
 
 			session = tf.Session(graph=graph)
 		self.session = session
@@ -251,7 +250,7 @@ class Network:
 		assert np.abs(sumP-1) < 1E-6
 		return P, v
 
-	def train(self, inputPlanes, inputPolicyMask, predictionProbability, predictionValue):
+	def train(self, inputPlanes, inputPolicyMask, predictionProbability, predictionValue, trainCount):
 		feed = {
 			self.inputPlanes: inputPlanes,
 			self.inputPolicyMask: inputPolicyMask,
@@ -259,6 +258,5 @@ class Network:
 			self.predictionValue: predictionValue,
 		}
 		result = self.session.run({'train':self.trainFunction, 'summary':self.summaryOp}, feed_dict = feed)
-		self.summary_writer.add_summary(result['summary'], self.trainCount)
-		self.trainCount += 1
+		self.summary_writer.add_summary(result['summary'], trainCount)
 
