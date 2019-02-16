@@ -17,11 +17,9 @@ class MCTEdge:
 	def setChildNode(self, childNode):
 		self.childNode = childNode
 
-	def backup(self):
-		if not self.childNode:
-			return
+	def backup(self, v):
 		self.N += 1
-		self.W += self.childNode.v
+		self.W += v
 		self.Q = self.W / self.N
 
 
@@ -69,7 +67,7 @@ class MCTNode:
 		U = self.U(Cpuct)
 		for edge in self.edges:
 			actionValue = U[edge.index] + edge.Q
-			if maxActionValue < actionValue:
+			if maxActionValueEdge is None or maxActionValue < actionValue:
 				maxActionValue = actionValue
 				maxActionValueEdge = edge
 		return maxActionValueEdge
@@ -94,9 +92,12 @@ class MCTS:
 	def getNodeCount(self):
 		return self.nodeCount
 
-	def backup(self, edge):
+	def backup(self, node):
+		v = node.v
+		edge = node.parentEdge
 		while edge:
-			edge.backup()
+			v = -v
+			edge.backup(v)
 			edge = edge.parentNode.parentEdge
 
 	def createNewNode(self, parentEdge = None):
@@ -108,8 +109,9 @@ class MCTS:
 
 	def expandNode(self, node):
 		edge = node.select(self.config.Cpuct)
-		if not edge:
-			return None
+		if not edge: # arrive terminate node, need backup too
+			self.nodeCount += 1 # virtual node
+			return node
 		self.game.takeAction(edge.action)
 		if edge.childNode: # recursion
 			newNode = self.expandNode(edge.childNode)
@@ -126,7 +128,7 @@ class MCTS:
 			self.rootNode = self.createNewNode()
 			newNode = self.rootNode
 		if newNode:
-			self.backup(newNode.parentEdge)
+			self.backup(newNode)
 			return True
 		return False
 

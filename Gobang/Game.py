@@ -6,7 +6,9 @@ class Game(AlphaZero.Game.Game):
 
     def __init__(self, network):
         self.chessBoard = np.empty([2, 19, 19], dtype=np.int8)
+        self.policyMask = np.empty(19*19, dtype=np.int8)
         self.network = network
+        self.actions = None
         self.reset()
 
     def isBoardFull(self):
@@ -77,15 +79,18 @@ class Game(AlphaZero.Game.Game):
 
     # get actions of current game state, can be list or dict with index key
     def getActions(self):
-        actions = {}
+        if self.actions:
+            return self.actions
+        actions = []
         for i in range(19):
             for j in range(19):
-                if self.chessBoard[0][i][j] == 0 and self.chessBoard[1][i][j] == 0:
-                    actions[i*19+j] = (i, j)
+                actions.append((i, j))
+        self.actions = actions
         return actions
 
     def takeAction(self, action):
         self.chessBoard[self.activeColor][action[0]][action[1]] = 1
+        self.policyMask[action[0]*19+action[1]] = 0
         if self.isSerialFive(action[0], action[1]):
             self.winner = self.activeColor
         self.activeColor ^= 1
@@ -98,10 +103,12 @@ class Game(AlphaZero.Game.Game):
         del self.historyActions[-1]
         self.activeColor ^= 1
         self.chessBoard[self.activeColor][action[0]][action[1]] = 0
+        self.policyMask[action[0]*19+action[1]] = 1
         self.winner = None
 
     def reset(self):
         self.chessBoard.fill(0)
+        self.policyMask.fill(1)
         self.historyActions = []
         self.activeColor = 0 # black 0, white 1
         self.winner = None
@@ -134,11 +141,6 @@ class Game(AlphaZero.Game.Game):
 
     # get network input planes, to filter legal actions
     def getInputPolicyMask(self):
-        mask = np.zeros(19*19, dtype=np.int8)
         if self.isTerminated():
-            return mask
-        for i in range(19):
-            for j in range(19):
-                if self.chessBoard[0][i][j] == 0 and self.chessBoard[1][i][j] == 0:
-                    mask[i * 19 + j] = 1
-        return mask
+            return np.zeros(19*19, dtype=np.int8)
+        return self.policyMask
