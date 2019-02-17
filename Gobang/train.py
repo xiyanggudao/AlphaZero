@@ -14,9 +14,11 @@ game = Game(network)
 mcts = MCTS(game, config.createMCTSConfig())
 trainer = Trainer(network, mcts, config.createTrainConfig())
 
-def selfPlayDataGenerate(queue):
+def selfPlayDataGenerate(queue, modelLock):
     while True:
+        modelLock.acquire()
         network.load()
+        modelLock.release()
         trainer.selfPlay(queue)
 
 if __name__ == '__main__':

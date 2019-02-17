@@ -75,11 +75,12 @@ class Trainer:
     def run(self, selfPlayDataGenerate, startBatch=0):
         processCount = os.cpu_count()
         trainDataQueue = multiprocessing.Queue(self.trainConfig.batchSize*processCount)
+        modelLock = multiprocessing.Lock()
         batchCount = startBatch
         # generate data by self play
         processPool = []
         for i in range(processCount):
-            processPool.append(multiprocessing.Process(target=selfPlayDataGenerate, args=(trainDataQueue,)))
+            processPool.append(multiprocessing.Process(target=selfPlayDataGenerate, args=(trainDataQueue, modelLock,)))
             processPool[-1].start()
         try:
             while batchCount < self.trainConfig.maxBatchs:
@@ -88,8 +89,10 @@ class Trainer:
                 print('train start', batchCount, end='')
                 sys.stdout.flush()
                 self.network.train(inputPlanes, inputPolicyMask, predictionProbability, predictionValue, batchCount)
-                batchCount += 1
+                modelLock.acquire()
                 self.network.save()
+                modelLock.release()
+                batchCount += 1
                 print('train end', end='')
                 sys.stdout.flush()
         finally:
