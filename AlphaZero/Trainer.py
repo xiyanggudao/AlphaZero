@@ -72,10 +72,10 @@ class Trainer:
             predictionValue.append(data.predictionValue)
         return inputPlanes, inputPolicyMask, predictionProbability, predictionValue
 
-    def run(self, selfPlayDataGenerate):
+    def run(self, selfPlayDataGenerate, startBatch=0):
         processCount = os.cpu_count()
         trainDataQueue = multiprocessing.Queue(self.trainConfig.batchSize*processCount)
-        batchCount = 0
+        batchCount = startBatch
         # generate data by self play
         processPool = []
         for i in range(processCount):
@@ -85,7 +85,7 @@ class Trainer:
             while batchCount < self.trainConfig.maxBatchs:
                 # train
                 inputPlanes, inputPolicyMask, predictionProbability, predictionValue = self.getBatchData(trainDataQueue)
-                print('train start', end='')
+                print('train start', batchCount, end='')
                 sys.stdout.flush()
                 self.network.train(inputPlanes, inputPolicyMask, predictionProbability, predictionValue, batchCount)
                 batchCount += 1
@@ -95,4 +95,5 @@ class Trainer:
         finally:
             for i in range(processCount):
                 processPool[i].terminate()
+            return batchCount
 

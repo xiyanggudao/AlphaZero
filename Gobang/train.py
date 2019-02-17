@@ -20,4 +20,13 @@ def selfPlayDataGenerate(queue):
         trainer.selfPlay(queue)
 
 if __name__ == '__main__':
-    trainer.run(selfPlayDataGenerate)
+    startBatchs = 0
+    startBatchFile = os.path.join(os.path.dirname(__file__), 'steps')
+    if os.path.exists(startBatchFile):
+        with open(startBatchFile, "rt") as batchFile:
+            text = batchFile.read()
+            startBatchs = int(text)
+    endBatchs = trainer.run(selfPlayDataGenerate, startBatchs)
+    if endBatchs and endBatchs > startBatchs:
+        with open(startBatchFile, "wt") as batchFile:
+            batchFile.write(str(endBatchs+1))
