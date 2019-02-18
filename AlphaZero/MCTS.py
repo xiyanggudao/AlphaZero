@@ -78,7 +78,7 @@ class MCTSConfig:
 	def __init__(self):
 		self.Cpuct = 1.5
 		self.temperature = 1
-		self.maxNodes = 2**10
+		self.maxNodes = 800
 
 
 class MCTS:
