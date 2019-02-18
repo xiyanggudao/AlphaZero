@@ -72,7 +72,7 @@ class Game(AlphaZero.Game.Game):
 
     # get (P, v) of current game state
     def getEvaluation(self):
-        mask = self.getInputPolicyMask()
+        mask = self.policyMask
         if self.isTerminated():
             return np.zeros(mask.shape), self.getTerminateValue()
         return self.network.run(self.getInputPlanes(), mask)
@@ -143,4 +143,4 @@ class Game(AlphaZero.Game.Game):
     def getInputPolicyMask(self):
         if self.isTerminated():
             return np.zeros(19*19, dtype=np.int8)
-        return self.policyMask
+        return self.policyMask.copy()

@@ -9,6 +9,8 @@ class TrainConfig:
     def __init__(self):
         self.batchSize = 128
         self.maxBatchs = 2**16
+        self.noiseScale = 0.2
+        self.dirichletAlpha = 0.2
 
 
 class TrainData:
@@ -27,7 +29,18 @@ class Trainer:
         self.MCTS = MCTS
         self.trainConfig = trainConfig
 
-    def selectActionIndex(self, Pi):
+    def selectActionIndex(self, Pi, mask):
+        legalActionCount = 0
+        for i in range(len(mask)):
+            if mask[i] != 0:
+                legalActionCount += 1
+        noise = np.random.dirichlet(self.trainConfig.dirichletAlpha*np.ones(legalActionCount))
+        noiseIndex = 0
+        scale = self.trainConfig.noiseScale
+        for i in range(len(mask)):
+            if mask[i] != 0:
+                Pi[i] = Pi[i]*(1-scale) + noise[noiseIndex]*scale
+                noiseIndex += 1
         try:
             return np.random.choice(len(Pi), p=Pi)
         except:
@@ -45,7 +58,7 @@ class Trainer:
             stepData.inputPlanes = self.MCTS.game.getInputPlanes()
             stepData.inputPolicyMask = self.MCTS.game.getInputPolicyMask()
             stepData.predictionProbability = Pi
-            actionIndex = self.selectActionIndex(Pi)
+            actionIndex = self.selectActionIndex(Pi, stepData.inputPolicyMask)
             action = self.MCTS.play(actionIndex)
             assert action
             dataOneGame.append(stepData)
