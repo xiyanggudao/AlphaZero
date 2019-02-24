@@ -33,7 +33,7 @@ class NetworkConfig:
 		self.valueHiddenLayerSize = 64
 
 		# train parameters
-		self.learningRate = 1E-2
+		self.learningRate = 0.2
 
 	def setInputPlane(self, planeLayers, planeRows, planeColumns):
 		self.inputPlaneLayers = planeLayers
@@ -239,15 +239,21 @@ class Network:
 
 	def run(self, inputPlanes, inputPolicyMask):
 		assert np.sum(inputPolicyMask) != 0
-		feed = {
-			self.inputPlanes: [inputPlanes],
-			self.inputPolicyMask: [inputPolicyMask],
-		}
-		result = self.session.run({'P': self.outputProbability, 'v': self.outputValue}, feed_dict = feed)
-		P = result['P'][0]
-		v = result['v'][0]
+		result = self.runBatch([inputPlanes], [inputPolicyMask])
+		P = result[0][0]
+		v = result[1][0]
 		sumP = np.sum(P)
 		assert np.abs(sumP-1) < 1E-6
+		return P, v
+
+	def runBatch(self, inputPlanes, inputPolicyMask):
+		feed = {
+			self.inputPlanes: inputPlanes,
+			self.inputPolicyMask: inputPolicyMask,
+		}
+		result = self.session.run({'P': self.outputProbability, 'v': self.outputValue}, feed_dict = feed)
+		P = result['P']
+		v = result['v']
 		return P, v
 
 	def train(self, inputPlanes, inputPolicyMask, predictionProbability, predictionValue, trainCount):

@@ -1,5 +1,9 @@
+from AlphaZero.Network import Network
 
 class Game:
+
+    def __init__(self, network: Network):
+        self.network = network
 
     # get (P, v) of current game state
     def getEvaluation(self):

@@ -2,11 +2,8 @@ import tkinter
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from AlphaZero.Network import Network
-from AlphaZero.MCTS import MCTS
 import Gobang.Config as config
 from Gobang.gui.Chessboard import Chessboard
-from Gobang.Game import Game
 
 def setWindowSize(window, width, height):
 	geometry = '%dx%d' % (width, height)
@@ -148,10 +145,10 @@ def onClick(pos):
 
 
 
-network = Network(config.createNetworkConfig())
-network.buildNetwork()
-game = Game(network)
-mcts = MCTS(game, config.createMCTSConfig())
+creator = config.GobangCreator()
+network = creator.createNetwork()
+mcts = creator.createMCTS(network)
+game = mcts.game
 
 rootWindow = tkinter.Tk()
 cv = tkinter.Canvas(rootWindow)

@@ -1,83 +1,31 @@
 import multiprocessing
-import numpy as np
 import sys
-import os
+from AlphaZero.SelfPlayer import SelfPlayer, NetworkBatch
+from AlphaZero.Creator import Creator
 
 
 class TrainConfig:
 
     def __init__(self):
-        self.batchSize = 128
+        self.trainBatchSize = 256
+        self.runBatchSize = 8
         self.maxBatchs = 2**16
-        self.noiseScale = 0.2
-        self.dirichletAlpha = 0.2
-
-
-class TrainData:
-
-    def __init__(self):
-        self.inputPlanes = None
-        self.inputPolicyMask = None
-        self.predictionProbability = None
-        self.predictionValue = None
+        self.processCount = 2
 
 
 class Trainer:
 
-    def __init__(self, network, MCTS, trainConfig):
-        self.network = network
-        self.MCTS = MCTS
+    def __init__(self, trainConfig: TrainConfig, creator: Creator):
+        self.network = creator.createNetwork()
         self.trainConfig = trainConfig
-
-    def selectActionIndex(self, Pi, mask):
-        legalActionCount = 0
-        for i in range(len(mask)):
-            if mask[i] != 0:
-                legalActionCount += 1
-        noise = np.random.dirichlet(self.trainConfig.dirichletAlpha*np.ones(legalActionCount))
-        noiseIndex = 0
-        scale = self.trainConfig.noiseScale
-        for i in range(len(mask)):
-            if mask[i] != 0:
-                Pi[i] = Pi[i]*(1-scale) + noise[noiseIndex]*scale
-                noiseIndex += 1
-        try:
-            return np.random.choice(len(Pi), p=Pi)
-        except:
-            print(Pi)
-
-    def selfPlay(self, queue):
-        dataOneGame = []
-        self.MCTS.reset()
-        while not self.MCTS.game.isTerminated():
-            self.MCTS.expandMaxNodes()
-            Pi = self.MCTS.Pi()
-            if not len(Pi) > 0:
-                break
-            stepData = TrainData()
-            stepData.inputPlanes = self.MCTS.game.getInputPlanes()
-            stepData.inputPolicyMask = self.MCTS.game.getInputPolicyMask()
-            stepData.predictionProbability = Pi
-            actionIndex = self.selectActionIndex(Pi, stepData.inputPolicyMask)
-            action = self.MCTS.play(actionIndex)
-            assert action
-            dataOneGame.append(stepData)
-        print('_', end='')
-        sys.stdout.flush()
-        resultValue = self.MCTS.game.getTerminateValue()
-        dataOneGame.reverse()
-        for data in dataOneGame:
-            data.predictionValue = resultValue
-            resultValue = -resultValue
-        for data in dataOneGame:
-            queue.put(data)
+        self.creator = creator
 
     def getBatchData(self, queue):
         inputPlanes = []
         inputPolicyMask = []
         predictionProbability = []
         predictionValue = []
-        for i in range(self.trainConfig.batchSize):
+        for i in range(self.trainConfig.trainBatchSize):
             data = queue.get()
             inputPlanes.append(data.inputPlanes)
             inputPolicyMask.append(data.inputPolicyMask)
@@ -85,31 +33,69 @@ class Trainer:
             predictionValue.append(data.predictionValue)
         return inputPlanes, inputPolicyMask, predictionProbability, predictionValue
 
-    def run(self, selfPlayDataGenerate, startBatch=0):
-        processCount = os.cpu_count()
-        trainDataQueue = multiprocessing.Queue(self.trainConfig.batchSize*processCount)
-        modelLock = multiprocessing.Lock()
+    def runTrain(self, startBatch=0):
+        trainDataQueue = multiprocessing.Queue(self.trainConfig.trainBatchSize*2)
+        modelFileLock = multiprocessing.Lock()
         batchCount = startBatch
-        # generate data by self play
+
+        # self play data child process
         processPool = []
-        for i in range(processCount):
-            processPool.append(multiprocessing.Process(target=selfPlayDataGenerate, args=(trainDataQueue, modelLock,)))
+        for i in range(1, self.trainConfig.processCount):
+            processPool.append(multiprocessing.Process(target=generateSelfPlayData, args=(self.creator, trainDataQueue, modelFileLock,)))
             processPool[-1].start()
+
+        # run self player
+        network = NetworkBatch(self.network, self.trainConfig.runBatchSize)
+        selfPlayConfig = self.creator.createSelfPlayConfig()
+        selfPlayer = SelfPlayer(network, self.creator, selfPlayConfig, trainDataQueue)
+        selfPlayer.start()
+
         try:
             while batchCount < self.trainConfig.maxBatchs:
+                # wait for data
+                while trainDataQueue.qsize() < self.trainConfig.trainBatchSize:
+                    network.condition.acquire()
+                    network.condition.wait()
+                    network.condition.release()
+
                 # train
                 inputPlanes, inputPolicyMask, predictionProbability, predictionValue = self.getBatchData(trainDataQueue)
                 print('train start', batchCount, end='')
                 sys.stdout.flush()
-                self.network.train(inputPlanes, inputPolicyMask, predictionProbability, predictionValue, batchCount)
-                modelLock.acquire()
-                self.network.save()
-                modelLock.release()
+                network.train(inputPlanes, inputPolicyMask, predictionProbability, predictionValue, batchCount)
+                modelFileLock.acquire()
+                network.save()
+                modelFileLock.release()
                 batchCount += 1
                 print('train end', end='')
                 sys.stdout.flush()
         finally:
-            for i in range(processCount):
-                processPool[i].terminate()
+            for process in processPool:
+                process.terminate()
             return batchCount
 
+    def runData(self, dataQueue, modelFileLock):
+        # run self player
+        network = NetworkBatch(self.network, self.trainConfig.runBatchSize)
+        selfPlayConfig = self.creator.createSelfPlayConfig()
+        selfPlayer = SelfPlayer(network, self.creator, selfPlayConfig, dataQueue)
+        selfPlayer.start()
+
+        # update model
+        gameCount = 0
+        while True:
+            network.condition.acquire()
+            network.condition.wait()
+            network.condition.release()
+
+            if gameCount != selfPlayer.gameCount and selfPlayer.gameCount % network.batchSize == 0:
+                gameCount = selfPlayer.gameCount
+                print('load', end='')
+                sys.stdout.flush()
+                modelFileLock.acquire()
+                network.load()
+                modelFileLock.release()
+
+def generateSelfPlayData(creator, queue, modelFileLock):
+    trainer = creator.createTrainer()
+    trainer.runData(queue, modelFileLock)

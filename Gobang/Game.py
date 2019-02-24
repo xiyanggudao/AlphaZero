@@ -1,10 +1,12 @@
 import AlphaZero.Game
 import numpy as np
+from AlphaZero.Network import Network
 
 
 class Game(AlphaZero.Game.Game):
 
-    def __init__(self, network):
+    def __init__(self, network: Network):
+        super().__init__(network)
         self.chessBoard = np.empty([2, 19, 19], dtype=np.int8)
         self.policyMask = np.empty(19*19, dtype=np.int8)
         self.network = network

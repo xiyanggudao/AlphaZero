@@ -1,5 +1,6 @@
 import numpy as np
 import sys
+from AlphaZero.Game import Game
 
 
 class MCTEdge:
@@ -83,7 +84,7 @@ class MCTSConfig:
 
 class MCTS:
 
-	def __init__(self, game, config):
+	def __init__(self, game: Game, config: MCTSConfig):
 		self.game = game
 		self.nodeCount = 0
 		self.rootNode = None
