@@ -5,71 +5,105 @@ from AlphaZero.MCTS import MCTS
 import threading
 import numpy as np
 import sys
-
-
+import multiprocessing
 
 
 class SelfPlayConfig:
 
     def __init__(self):
-        self.threadCount = 16
+        self.clientCount = 16
         self.noiseScale = 0.2
         self.dirichletAlpha = 0.2
 
 
-class NetworkBatch:
+class NetworkInput:
 
-    def __init__(self, network: Network, batchSize: int):
-        self.network = network
-        self.batchSize = batchSize
-        self.blockThreadIds = []
-        self.lock = threading.Lock()
-        self.condition = threading.Condition(self.lock)
-        self.batchDataInputPlanes = {}
-        self.batchDataInputPolicyMask = {}
-        self.batchDataOutput = {}
+    def __init__(self):
+        self.inputPlanes = None
+        self.inputPolicyMask = None
 
-    def __runBatchData(self):
-        assert len(self.blockThreadIds) == self.batchSize
-        inputPlanes = []
-        inputPolicyMask = []
-        for id in self.blockThreadIds:
-            inputPlanes.append(self.batchDataInputPlanes[id])
-            inputPolicyMask.append(self.batchDataInputPolicyMask[id])
-        P, v = self.network.runBatch(inputPlanes, inputPolicyMask)
-        for i in range(len(self.blockThreadIds)):
-            self.batchDataOutput[self.blockThreadIds[i]] = (P[i], v[i])
 
-    def __fetchOutput(self, threadId):
-        P, v = self.batchDataOutput[threadId]
-        self.batchDataOutput[threadId] = None
-        return P, v
+class NetworkOutput:
+
+    def __init__(self):
+        self.outputProbability = None
+        self.outputValue = None
+
+
+class NetworkClient:
+
+    def __init__(self, queueInput, queueOutput):
+        self.queueInput = queueInput
+        self.queueOutput = queueOutput
 
     def run(self, inputPlanes, inputPolicyMask):
         assert np.sum(inputPolicyMask) != 0
 
-        self.lock.acquire()
+        input = NetworkInput()
+        input.inputPlanes = inputPlanes
+        input.inputPolicyMask = inputPolicyMask
+        self.queueInput.put(input)
+        result = self.queueOutput.get()
 
-        threadId = threading.get_ident()
-        self.blockThreadIds.append(threadId)
-        self.batchDataInputPlanes[threadId] = inputPlanes
-        self.batchDataInputPolicyMask[threadId] = inputPolicyMask
-        if len(self.blockThreadIds) < self.batchSize:
-            self.condition.wait()
-            P, v = self.__fetchOutput(threadId)
-        else:
-            self.__runBatchData()
-            self.blockThreadIds.clear()
-            self.condition.notify_all()
-            P, v = self.__fetchOutput(threadId)
-
-        self.lock.release()
-
-        sumP = np.sum(P)
-        if np.abs(sumP-1) >= 1E-4:
-            print('sumP', sumP)
+        sumP = np.sum(result.outputProbability)
         assert np.abs(sumP-1) < 1E-4
-        return P, v
+
+        return result.outputProbability, result.outputValue
+
+
+class NetworkServer:
+
+    def __init__(self, network: Network, batchSize: int):
+        self.network = network
+        self.lock = threading.Lock()
+        self.batchSize = batchSize
+        self.inputQueues = []
+        self.outputQueues = []
+
+    def createNetworkClient(self) -> NetworkClient:
+        inQueue = multiprocessing.Queue()
+        ouQueue = multiprocessing.Queue()
+        client = NetworkClient(inQueue, ouQueue)
+        self.inputQueues.append(inQueue)
+        self.outputQueues.append(ouQueue)
+        return client
+
+    def runBatch(self, inputs):
+        assert len(inputs) == self.batchSize
+        inputPlanes = []
+        inputPolicyMask = []
+        for data in inputs:
+            inputPlanes.append(data.inputPlanes)
+            inputPolicyMask.append(data.inputPolicyMask)
+        self.lock.acquire()
+        P, v = self.network.runBatch(inputPlanes, inputPolicyMask)
+        self.lock.release()
+        outputs = []
+        for i in range(self.batchSize):
+            outData = NetworkOutput()
+            outData.outputProbability = P[i]
+            outData.outputValue = v[i]
+            outputs.append(outData)
+        return outputs
+
+    def run(self):
+        qCount = len(self.inputQueues)
+        assert qCount == len(self.outputQueues)
+        assert self.batchSize < qCount
+
+        startIndex = 0
+        endIndex = 0
+        inputs = []
+        while True:
+            inputs.clear()
+            while len(inputs) < self.batchSize:
+                inputs.append(self.inputQueues[endIndex].get())
+                endIndex = (endIndex + 1) % qCount
+            outputs = self.runBatch(inputs)
+            assert len(inputs) == len(outputs)
+            for data in outputs:
+                self.outputQueues[startIndex].put(data)
+                startIndex = (startIndex + 1) % qCount
 
     def load(self):
         self.lock.acquire()
@@ -87,27 +121,26 @@ class NetworkBatch:
         self.lock.release()
 
 
-class SelfPlayer:
+class SelfPlayerClient:
 
-    def __init__(self, network: NetworkBatch, creator: Creator, config: SelfPlayConfig, dataQueue):
+    def __init__(self, network: NetworkClient, creator: Creator, dataQueue):
         self.network = network
         self.creator = creator
-        self.config = config
         self.dataQueue = dataQueue
-        self.gameCount = 0
+        self.process = None
+        self.config = None
 
     def start(self):
-        assert self.network.batchSize <= self.config.threadCount
-
-        for i in range(self.config.threadCount):
-            thread = threading.Thread(target=self.run, daemon=True)
-            thread.start()
+        assert self.process is None
+        process = multiprocessing.Process(target=self.run)
+        process.start()
+        self.process = process
 
     def run(self):
         mcts = self.creator.createMCTS(self.network)
+        self.config = self.creator.createSelfPlayConfig()
         while True:
             self.selfPlay(mcts, self.dataQueue)
-            self.gameCount += 1
 
     def selectActionIndex(self, Pi, mask):
         legalActionCount = 0
@@ -151,3 +184,38 @@ class SelfPlayer:
             resultValue = -resultValue
         for data in dataOneGame:
             queue.put(data)
+
+
+class SelfPlayerServer:
+
+    def __init__(self, network: NetworkServer, creator: Creator, dataQueue):
+        self.network = network
+        self.creator = creator
+        self.dataQueue = dataQueue
+        self.clients = []
+
+    def start(self):
+        assert self.network.batchSize <= len(self.clients)
+
+        thread = threading.Thread(target=self.run, daemon=True)
+        thread.start()
+        for client in self.clients:
+            client.start()
+
+    def createClients(self):
+        config = self.creator.createSelfPlayConfig()
+        for i in range(config.clientCount):
+            self.createSelfPlayerClient()
+
+    def createSelfPlayerClient(self) -> SelfPlayerClient:
+        networkClient = self.network.createNetworkClient()
+        client = SelfPlayerClient(networkClient, self.creator, self.dataQueue)
+        self.clients.append(client)
+        return client
+
+    def terminateClients(self):
+        for client in self.clients:
+            client.process.terminate()
+
+    def run(self):
+        self.network.run()
