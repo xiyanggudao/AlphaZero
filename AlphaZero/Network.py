@@ -31,9 +31,10 @@ class NetworkConfig:
 		self.valueKernelSize = 1
 		self.valueHiddenLayers = 1
 		self.valueHiddenLayerSize = 64
+		self.batchNormGamma = 0.1
 
 		# train parameters
-		self.learningRate = 0.2
+		self.learningRate = 0.1
 
 	def setInputPlane(self, planeLayers, planeRows, planeColumns):
 		self.inputPlaneLayers = planeLayers
@@ -60,90 +61,33 @@ class Network:
 		self.predictionProbability = None
 		self.predictionValue = None
 		self.trainFunction = None
+		self.isTraining = None
 
-	def batchNormalization(self, x):
-		mean, variance = tf.nn.moments(x, [0])
-		return tf.nn.batch_normalization(x, mean, variance, 0, 1, 1e-8)
+	def batchNormalization(self, x, isTraining):
+		return tf.layers.batch_normalization(x, training=isTraining,
+			gamma_initializer=tf.initializers.constant(self.config.batchNormGamma))
 
-	def addConvolutionLayer(self, input, in_channels, out_channels, kSize):
-		weights = tf.Variable(tf.random.normal([kSize, kSize, in_channels, out_channels]))
-		bias = tf.Variable(tf.random.normal([out_channels]))
-		z = tf.nn.conv2d(input, weights, strides=[1, 1, 1, 1], padding='SAME')
-		normal = self.batchNormalization(z) + bias
+	def addConvolutionLayer(self, input, channels, kSize, isTraining):
+		z = tf.layers.conv2d(input, channels, (kSize, kSize), padding="same", use_bias=False,
+				kernel_initializer=tf.initializers.random_normal())
+		normal = self.batchNormalization(z, isTraining)
 		y = tf.nn.relu(normal)
-
-		tf.summary.histogram("params/weight" + str(self.layer_cnt), weights)
-		tf.summary.histogram("params/bias" + str(self.layer_cnt), bias)
-		tf.summary.histogram("res/z" + str(self.layer_cnt), z)
-		tf.summary.histogram("res/znorm" + str(self.layer_cnt), normal)
-		self.layer_cnt += 1
-
 		return y
 
-	def addResidualConvolutionBlock(self, input, channels, kSize):
-		layer1 = self.addConvolutionLayer(input, channels, channels, kSize)
-		weights = tf.Variable(tf.random.normal([kSize, kSize, channels, channels]))
-		bias = tf.Variable(tf.random.normal([channels]))
-		z = tf.nn.conv2d(layer1, weights, strides=[1, 1, 1, 1], padding='SAME')
-		normal = self.batchNormalization(z) + bias
+	def addResidualConvolutionBlock(self, input, channels, kSize, isTraining):
+		layer1 = self.addConvolutionLayer(input, channels, kSize, isTraining)
+		z = tf.layers.conv2d(layer1, channels, (kSize, kSize), padding="same", use_bias=False,
+			kernel_initializer=tf.initializers.random_normal())
+		normal = self.batchNormalization(z, isTraining)
 		y = tf.nn.relu(normal + input)
-
-		tf.summary.histogram("params/weight" + str(self.layer_cnt), weights)
-		tf.summary.histogram("params/bias" + str(self.layer_cnt), bias)
-		tf.summary.histogram("res/z" + str(self.layer_cnt), z)
-		tf.summary.histogram("res/znorm" + str(self.layer_cnt), normal)
-		self.layer_cnt += 1
-
-		return y
-
-	def addPureDenseLayer(self, input, inputSize, outputSize):
-		weights = tf.Variable(tf.random.normal([inputSize, outputSize]))
-		bias = tf.Variable(tf.random.normal([1, outputSize]))
-		z = tf.matmul(input, weights)
-		normal = self.batchNormalization(z) + bias
-		y = normal
-
-		tf.summary.histogram("params/weight" + str(self.layer_cnt), weights)
-		tf.summary.histogram("params/bias" + str(self.layer_cnt), bias)
-		tf.summary.histogram("res/z" + str(self.layer_cnt), z)
-		tf.summary.histogram("res/znorm" + str(self.layer_cnt), normal)
-		self.layer_cnt += 1
-
-		return y
-
-	def addDenseLayer(self, input, inputSize, outputSize):
-		z = self.addPureDenseLayer(input, inputSize, outputSize)
-		y = tf.nn.relu(z)
 		return y
 
 	def addSoftmaxLayer(self, input, mask):
-		# softmax[i] = exp(input[i]) / sum(exp(input))
-		# pickySoftmax[i] = pickySwitch[i]*exp(input[i]) / sum(pickySwitch*exp(input))
 		expVal = tf.math.exp(input) * mask
 		y = expVal / tf.math.reduce_sum(expVal, 1, keepdims=True)
-
-		tf.summary.histogram("res/softmax" + str(self.layer_cnt), y)
-		self.layer_cnt += 1
-
-		return y
-
-	def AddTanhDenceLayer(self, input, inputSize, outputSize):
-		weights = tf.Variable(tf.random.normal([inputSize, outputSize]))
-		bias = tf.Variable(tf.random.normal([1, outputSize]))
-		z = tf.matmul(input, weights) + bias
-		y = tf.nn.tanh(z)
-
-		tf.summary.histogram("params/weight" + str(self.layer_cnt), weights)
-		tf.summary.histogram("params/bias" + str(self.layer_cnt), bias)
-		tf.summary.histogram("res/z" + str(self.layer_cnt), z)
-		tf.summary.histogram("res/tanh" + str(self.layer_cnt), y)
-		self.layer_cnt += 1
-
 		return y
 
 	def createNetworkGraph(self):
-		assert self.config
-		self.layer_cnt = 0
 		graph = tf.Graph()
 		with graph.as_default():
 			# input layer
@@ -152,38 +96,44 @@ class Network:
 				, self.config.inputPlaneRows
 				, self.config.inputPlaneLayers])
 			inputPolicyMaskLayer = tf.placeholder(tf.float32, [None, self.config.outputProbabilitySize])
+			isTraining = tf.placeholder(tf.bool)
+
 			# middle hidden layer
 			middleLayer = self.addConvolutionLayer(inputLayer
-				, self.config.inputPlaneLayers
 				, self.config.blockConvolutionFilters
-				, self.config.blockKernelSize)
+				, self.config.blockKernelSize, isTraining)
+			tf.summary.histogram("res/first", middleLayer)
 			for i in range(self.config.residualBlocks):
 				middleLayer= self.addResidualConvolutionBlock(middleLayer
 					, self.config.blockConvolutionFilters
-					, self.config.blockKernelSize)
+					, self.config.blockKernelSize, isTraining)
+			tf.summary.histogram("res/middle", middleLayer)
+
 			# policy layer
 			policyLayer = self.addConvolutionLayer(middleLayer
-				, self.config.blockConvolutionFilters
 				, self.config.policyConvolutionFilters
-				, self.config.policyKernelSize)
-			policyFlattenSize = self.config.inputPlaneColumns * self.config.inputPlaneRows * self.config.policyConvolutionFilters
-			policyLayer = tf.reshape(policyLayer, [-1, policyFlattenSize]) # flatten
-			policyLayer = self.addPureDenseLayer(policyLayer, policyFlattenSize, self.config.outputProbabilitySize)
+				, self.config.policyKernelSize, isTraining)
+			policyLayer = tf.layers.flatten(policyLayer)
+			policyLayer = tf.layers.dense(policyLayer, self.config.outputProbabilitySize,
+				kernel_initializer=tf.initializers.truncated_normal(0, 1/policyLayer.shape.as_list()[1]))
+			tf.summary.histogram("res/policy", policyLayer)
 			policyLayer = self.addSoftmaxLayer(policyLayer, inputPolicyMaskLayer)
+
 			# value layer
 			valueLayer = self.addConvolutionLayer(middleLayer
-				, self.config.blockConvolutionFilters
 				, self.config.valueConvolutionFilters
-				, self.config.valueKernelSize)
-			valueHiddenLayerSize = self.config.inputPlaneColumns * self.config.inputPlaneRows * self.config.valueConvolutionFilters
-			valueLayer = tf.reshape(valueLayer, [-1, valueHiddenLayerSize])  # flatten
+				, self.config.valueKernelSize, isTraining)
+			valueLayer = tf.layers.flatten(valueLayer)
 			for i in range(self.config.valueHiddenLayers):
-				valueLayer = self.addDenseLayer(valueLayer, valueHiddenLayerSize, self.config.valueHiddenLayerSize)
-				valueHiddenLayerSize = self.config.valueHiddenLayerSize
-			valueLayer = self.AddTanhDenceLayer(valueLayer, valueHiddenLayerSize, 1)
-			valueLayer = tf.reshape(valueLayer, [-1])
+				valueLayer = tf.layers.dense(valueLayer, self.config.valueHiddenLayerSize,
+					activation=tf.nn.relu,
+					kernel_initializer=tf.initializers.truncated_normal(0, 1/valueLayer.shape.as_list()[1]))
+			valueLayer = tf.layers.dense(valueLayer, 1, activation=tf.nn.tanh,
+				kernel_initializer=tf.initializers.truncated_normal(0, 1/valueLayer.shape.as_list()[1]))
+			valueLayer = tf.layers.flatten(valueLayer)
+			tf.summary.histogram("res/value", valueLayer)
 
-			# train variant
+			# loss
 			predictionProbability = tf.placeholder(tf.float32, [None, self.config.outputProbabilitySize])
 			predictionValue = tf.placeholder(tf.float32, [None])
 			lossL2 = tf.math.reduce_mean([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
@@ -193,7 +143,11 @@ class Network:
 			lossPolicy = self.config.cOfPolicyLoss * lossPolicy
 			lossL2 = self.config.cOfL2Loss * lossL2
 			loss = lossValue + lossPolicy + lossL2
-			train = tf.train.GradientDescentOptimizer(self.config.learningRate).minimize(loss)
+
+			# train
+			updateOps = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+			with tf.control_dependencies(updateOps):
+				train = tf.train.GradientDescentOptimizer(self.config.learningRate).minimize(loss)
 
 			# summary
 			tf.summary.scalar('loss', loss)
@@ -204,6 +158,7 @@ class Network:
 			self.summary_writer = tf.summary.FileWriter('logs')
 
 			session = tf.Session(graph=graph)
+			session.run(tf.global_variables_initializer())
 		self.session = session
 		self.graph = graph
 		self.inputPlanes = inputLayer
@@ -213,6 +168,7 @@ class Network:
 		self.predictionProbability = predictionProbability
 		self.predictionValue = predictionValue
 		self.trainFunction = train
+		self.isTraining = isTraining
 
 	def buildNetwork(self):
 		assert self.config
@@ -243,13 +199,14 @@ class Network:
 		P = result[0][0]
 		v = result[1][0]
 		sumP = np.sum(P)
-		assert np.abs(sumP-1) < 1E-6
+		assert np.abs(sumP-1) < 1E-4
 		return P, v
 
 	def runBatch(self, inputPlanes, inputPolicyMask):
 		feed = {
 			self.inputPlanes: inputPlanes,
 			self.inputPolicyMask: inputPolicyMask,
+			self.isTraining: False,
 		}
 		result = self.session.run({'P': self.outputProbability, 'v': self.outputValue}, feed_dict = feed)
 		P = result['P']
@@ -262,6 +219,7 @@ class Network:
 			self.inputPolicyMask: inputPolicyMask,
 			self.predictionProbability: predictionProbability,
 			self.predictionValue: predictionValue,
+			self.isTraining: True,
 		}
 		result = self.session.run({'train':self.trainFunction, 'summary':self.summaryOp}, feed_dict = feed)
 		self.summary_writer.add_summary(result['summary'], trainCount)

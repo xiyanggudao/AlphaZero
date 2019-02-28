@@ -1,2 +1,2 @@
-model_checkpoint_path: "C:\\Users\\lc\\code\\alpha_zero\\AlphaZero\\Gobang/model/model.ckpt"
-all_model_checkpoint_paths: "C:\\Users\\lc\\code\\alpha_zero\\AlphaZero\\Gobang/model/model.ckpt"
+model_checkpoint_path: "model.ckpt"
+all_model_checkpoint_paths: "model.ckpt"

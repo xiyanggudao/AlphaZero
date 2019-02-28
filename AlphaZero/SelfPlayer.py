@@ -29,10 +29,6 @@ class NetworkBatch:
         self.batchDataInputPolicyMask = {}
         self.batchDataOutput = {}
 
-    def __getattribute__(self, name):
-        attr = object.__getattribute__(self, name)
-        return attr
-
     def __runBatchData(self):
         assert len(self.blockThreadIds) == self.batchSize
         inputPlanes = []
