@@ -138,8 +138,8 @@ def onClick(pos):
 	if pos == None:
 		return
 	global game
-	if game.chessBoard[0][pos[0]][pos[1]] == 0\
-		and game.chessBoard[1][pos[0]][pos[1]] == 0\
+	if game.chessBoard[0][pos[0]][pos[1]][0] == 0\
+		and game.chessBoard[0][pos[0]][pos[1]][1] == 0\
 		and not game.isTerminated():
 		action(pos[0]*19+pos[1])
 
@@ -158,7 +158,7 @@ rootWindow.bind('<Key>', onKey)
 miniW, miniH = board.minimumSize()
 rootWindow.minsize(miniW, miniH)
 rootWindow.title('Gobang')
-setWindowSize(rootWindow, miniW, miniH+5)
+setWindowSize(rootWindow, miniW+200, miniH)
 refreshBoard()
 
 cv.pack(fill=tkinter.BOTH, expand=1)
