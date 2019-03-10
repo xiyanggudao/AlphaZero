@@ -41,16 +41,6 @@ class MCTNode:
 				return edge
 		return None
 
-	def U(self, Cpuct):
-		sumN = 1E-8 # eps is better than 0 when maxNodes is low
-		for edge in self.edges:
-			sumN += edge.N
-		sqrtSumN = sumN ** 0.5
-		returnValue = np.zeros(self.edgeSize, np.float32)
-		for edge in self.edges:
-			returnValue[edge.index] = Cpuct * edge.P * sqrtSumN / (1 + edge.N)
-		return returnValue
-
 	def Pi(self, temperature):
 		sumN = 0
 		exp = 1 / temperature
@@ -63,11 +53,16 @@ class MCTNode:
 		return returnValue
 
 	def select(self, Cpuct):
+		sumN = 1E-8 # eps is better than 0 when maxNodes is low
+		for edge in self.edges:
+			sumN += edge.N
+		sqrtSumN = sumN ** 0.5
+
 		maxActionValue = -1
 		maxActionValueEdge = None
-		U = self.U(Cpuct)
 		for edge in self.edges:
-			actionValue = U[edge.index] + edge.Q
+			U = Cpuct * edge.P * sqrtSumN / (1 + edge.N)
+			actionValue = U + edge.Q
 			if maxActionValueEdge is None or maxActionValue < actionValue:
 				maxActionValue = actionValue
 				maxActionValueEdge = edge
