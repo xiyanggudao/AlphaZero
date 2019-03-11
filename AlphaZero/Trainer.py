@@ -1,5 +1,6 @@
 import multiprocessing
 import sys
+import os
 from AlphaZero.SelfPlayer import SelfPlayerServer, NetworkServer
 from AlphaZero.Creator import Creator
 
@@ -32,7 +33,13 @@ class Trainer:
             predictionValue.append(data.predictionValue)
         return inputPlanes, inputPolicyMask, predictionProbability, predictionValue
 
-    def runTrain(self, startBatch=0):
+    def runTrain(self, batchStepFile):
+        startBatch = 0
+        if os.path.exists(batchStepFile):
+            with open(batchStepFile, "rt") as batchFile:
+                text = batchFile.read()
+                startBatch = int(text)
+
         trainDataQueue = multiprocessing.Queue(self.trainConfig.trainBatchSize*2)
         batchCount = startBatch
 
@@ -51,6 +58,8 @@ class Trainer:
                 network.train(inputPlanes, inputPolicyMask, predictionProbability, predictionValue, batchCount)
                 network.save()
                 batchCount += 1
+                with open(batchStepFile, "wt") as batchFile:
+                    batchFile.write(str(batchCount))
                 print('train end', end='')
                 sys.stdout.flush()
         finally:
