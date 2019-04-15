@@ -1,1 +1,1 @@
-start pythonw Gobang/play.py
+start python Gobang/play.py
