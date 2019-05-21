@@ -8,7 +8,7 @@ from AlphaZero.Creator import Creator
 class TrainConfig:
 
     def __init__(self):
-        self.trainBatchSize = 256
+        self.trainBatchSize = 512
         self.runBatchSize = 8
         self.maxBatchs = 2**16
 

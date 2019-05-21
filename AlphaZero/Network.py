@@ -18,7 +18,7 @@ class NetworkConfig:
 		self.outputProbabilitySize = 0
 
 		# a parameter controlling the level of L2 weight regularisation in loss function
-		self.cOfL2Loss = 1E-4
+		self.cOfL2Loss = 1E-3
 		self.cOfPolicyLoss = 1
 
 		# network parameters
@@ -34,7 +34,7 @@ class NetworkConfig:
 		self.batchNormGamma = 0.1
 
 		# train parameters
-		self.learningRate = 0.1
+		self.learningRate = 0.001
 
 	def setInputPlane(self, planeLayers, planeRows, planeColumns):
 		self.inputPlaneLayers = planeLayers
