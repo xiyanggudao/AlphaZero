@@ -3,14 +3,17 @@ from Gobang.gui.PositionCalculator import PositionCalculator
 
 class Chessboard:
 
-	def __init__(self, canvas):
+	def __init__(self, canvas, row, column):
 		canvas.bind('<Configure>', self.__onResize)
 		canvas.bind('<Button-1>', self.__onLButtonClick)
+
+		self.row = row
+		self.column = column
 
 		self.__painter = ChessboardPainter(canvas)
 		self.__painter.setBoardColor('grey')
 
-		self.__posCalculator = PositionCalculator()
+		self.__posCalculator = PositionCalculator(row, column)
 		self.__posCalculator.setChessmanSpacing(3)
 
 		self.__chessmenOnBoard = []
@@ -19,13 +22,13 @@ class Chessboard:
 
 	def __positionAtScreen(self, x, y):
 		# 棋盘坐标左下角为原点，屏幕坐标左上角为原点，需要转换
-		y = 18-y
+		y = self.row-1-y
 		return self.__posCalculator.positionAtScreen(x, y)
 
 	def __positionAtBoard(self, x, y):
 		pos = self.__posCalculator.positionAtBoard(x, y)
 		if pos:
-			return (pos[0], 18-pos[1])
+			return (pos[0], self.row-1-pos[1])
 
 	def __onResize(self, event):
 		self.__posCalculator.setChessboardSize(event.width, event.height)
@@ -52,27 +55,14 @@ class Chessboard:
 		self.__painter.drawRectangle(x, y, width, height, 2)
 
 	def __drawGrid(self):
-		for row in range(1, 18):
+		for row in range(1, self.row-1):
 			x1,y1 = self.__positionAtScreen(0, row)
-			x2,y2 = self.__positionAtScreen(18, row)
+			x2,y2 = self.__positionAtScreen(self.column-1, row)
 			self.__painter.drawLine(x1,y1,x2,y2,1)
-		for col in range(1, 18):
+		for col in range(1, self.column-1):
 			x1, y1 = self.__positionAtScreen(col, 0)
-			x2, y2 = self.__positionAtScreen(col, 18)
+			x2, y2 = self.__positionAtScreen(col, self.row-1)
 			self.__painter.drawLine(x1, y1, x2, y2, 1)
-
-	def __drawPoint(self):
-		x1,y1 = self.__positionAtScreen(3,3)
-		x2,y2 = self.__positionAtScreen(3,15)
-		x3,y3 = self.__positionAtScreen(15,3)
-		x4,y4 = self.__positionAtScreen(15,15)
-		x5,y5 = self.__positionAtScreen(9,9)
-		radius = 5
-		self.__painter.drawDisk(x1,y1, radius)
-		self.__painter.drawDisk(x2,y2, radius)
-		self.__painter.drawDisk(x3,y3, radius)
-		self.__painter.drawDisk(x4,y4, radius)
-		self.__painter.drawDisk(x5,y5, radius)
 
 	def __drawChessman(self, pos, activeColor, step):
 		chessColors = ['#000000', '#ffffff']
@@ -99,7 +89,6 @@ class Chessboard:
 		self.__drawBackground()
 		self.__drawBorder()
 		self.__drawGrid()
-		self.__drawPoint()
 		self.__drawChessmen()
 
 	def printValue(self, text, pos=None):

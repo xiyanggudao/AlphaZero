@@ -15,12 +15,13 @@ class GobangCreator(CreatorBase):
 
     def createNetworkConfig(self) -> NetworkConfig:
         config = NetworkConfig()
-        config.setInputPlane(3, 19, 19)
-        config.setOutputProbabilitySize(19 * 19)
+        config.setInputPlane(3, 11, 11)
+        config.setOutputProbabilitySize(11 * 11)
         path = os.path.dirname(__file__)
         config.setModelFilePath(path + '/model/model.ckpt')
         config.blockConvolutionFilters = 64
-        config.residualBlocks = 6
+        config.residualBlocks = 1
+        config.learningRate = 0.01
         return config
 
     def createMCTSConfig(self) -> MCTSConfig:
@@ -29,6 +30,7 @@ class GobangCreator(CreatorBase):
 
     def createTrainConfig(self) -> TrainConfig:
         config = TrainConfig()
+        config.trainBatchSize = 128
         return config
 
     def createSelfPlayConfig(self) -> SelfPlayConfig:

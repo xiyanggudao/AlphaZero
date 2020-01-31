@@ -141,7 +141,7 @@ def onClick(pos):
 	if game.chessBoard[0][pos[0]][pos[1]][0] == 0\
 		and game.chessBoard[0][pos[0]][pos[1]][1] == 0\
 		and not game.isTerminated():
-		action(pos[0]*19+pos[1])
+		action(pos[0]*game.row+pos[1])
 
 
 
@@ -152,7 +152,7 @@ game = mcts.game
 
 rootWindow = tkinter.Tk()
 cv = tkinter.Canvas(rootWindow)
-board = Chessboard(cv)
+board = Chessboard(cv, game.row, game.column)
 board.setMoveEventListener(onClick)
 rootWindow.bind('<Key>', onKey)
 miniW, miniH = board.minimumSize()

@@ -115,7 +115,7 @@ class Network:
 				, self.config.policyKernelSize, isTraining)
 			policyLayer = tf.layers.flatten(policyLayer)
 			policyLayer = tf.layers.dense(policyLayer, self.config.outputProbabilitySize,
-				kernel_initializer=tf.initializers.truncated_normal(0, 1/policyLayer.shape.as_list()[1]))
+				kernel_initializer=tf.initializers.random_normal())
 			tf.summary.histogram("res/policy", policyLayer)
 			policyLayer = self.addSoftmaxLayer(policyLayer, inputPolicyMaskLayer)
 
@@ -127,9 +127,9 @@ class Network:
 			for i in range(self.config.valueHiddenLayers):
 				valueLayer = tf.layers.dense(valueLayer, self.config.valueHiddenLayerSize,
 					activation=tf.nn.relu,
-					kernel_initializer=tf.initializers.truncated_normal(0, 1/valueLayer.shape.as_list()[1]))
+					kernel_initializer=tf.initializers.random_normal())
 			valueLayer = tf.layers.dense(valueLayer, 1, activation=tf.nn.tanh,
-				kernel_initializer=tf.initializers.truncated_normal(0, 1/valueLayer.shape.as_list()[1]))
+				kernel_initializer=tf.initializers.random_normal())
 			valueLayer = tf.layers.flatten(valueLayer)
 			tf.summary.histogram("res/value", valueLayer)
 

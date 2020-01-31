@@ -32,9 +32,10 @@ class NetworkOutput:
 
 class NetworkClient:
 
-    def __init__(self, queueInput, queueOutput):
+    def __init__(self, network: Network, queueInput, queueOutput):
         self.queueInput = queueInput
         self.queueOutput = queueOutput
+        self.config = network.config
 
     def run(self, inputPlanes, inputPolicyMask):
         assert np.sum(inputPolicyMask) != 0
@@ -63,7 +64,7 @@ class NetworkServer:
     def createNetworkClient(self) -> NetworkClient:
         inQueue = multiprocessing.Queue()
         ouQueue = multiprocessing.Queue()
-        client = NetworkClient(inQueue, ouQueue)
+        client = NetworkClient(self.network, inQueue, ouQueue)
         self.inputQueues.append(inQueue)
         self.outputQueues.append(ouQueue)
         return client

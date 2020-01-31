@@ -1,11 +1,14 @@
 
 class PositionCalculator:
 
-	def __init__(self):
+	def __init__(self, row, column):
 		self.__width = 0
 		self.__height = 0
 		self.__margin = 0
 		self.__chessmanSpacing = 0
+
+		self.row = row
+		self.column = column
 
 	def borderPos(self):
 		borderSize = self.__borderSize(self.chessmanSize())
@@ -35,19 +38,19 @@ class PositionCalculator:
 		retY = y//cellSize
 		if x-retX*cellSize > chessmanSize or y-retY*cellSize > chessmanSize:
 			return
-		if retX>18 or retY>18:
+		if retX>self.column-1 or retY>self.row-1:
 			return
 		return (retX, retY)
 
 	def chessmanSize(self):
 		maxWidth = self.__width
 		maxWidth -= 2*self.__margin
-		maxWidth -= 18*self.__chessmanSpacing
-		maxWidth //= 18
+		maxWidth -= (self.column-1)*self.__chessmanSpacing
+		maxWidth //= self.column-1
 		maxHeight  = self.__height
 		maxHeight -= 2*self.__margin
-		maxHeight -= 18*self.__chessmanSpacing
-		maxHeight //= 18
+		maxHeight -= (self.row-1)*self.__chessmanSpacing
+		maxHeight //= self.row
 		return min(maxWidth, maxHeight)
 
 	def borderSize(self):
@@ -57,9 +60,9 @@ class PositionCalculator:
 		return (self.__width, self.__height)
 
 	def __borderSize(self, chessmanSize):
-		retWidth, retHeight = (18*chessmanSize, 18*chessmanSize)
-		retWidth += 18*self.__chessmanSpacing
-		retHeight += 18*self.__chessmanSpacing
+		retWidth, retHeight = ((self.column-1)*chessmanSize, (self.row-1)*chessmanSize)
+		retWidth += (self.column-1)*self.__chessmanSpacing
+		retHeight += (self.row-1)*self.__chessmanSpacing
 		return (retWidth, retHeight)
 
 	def boardSizeForFixedChessmanSize(self, chessmanSize):

@@ -7,14 +7,16 @@ class Game(AlphaZero.Game.Game):
 
     def __init__(self, network: Network):
         super().__init__(network)
-        self.chessBoard = np.empty([2, 19, 19, 3], dtype=np.int8)
-        self.policyMask = np.empty(19*19, dtype=np.int8)
+        self.row = network.config.inputPlaneRows
+        self.column = network.config.inputPlaneColumns
+        self.chessBoard = np.empty([2, self.column, self.row, 3], dtype=np.int8)
+        self.policyMask = np.empty(self.column*self.row, dtype=np.int8)
         self.network = network
         self.actions = None
         self.reset()
 
     def isBoardFull(self):
-        return len(self.historyActions) >= 19*19
+        return len(self.historyActions) >= self.row*self.column
 
     def isSerialFive(self, i, j):
         if self.chessBoard[0][i][j][0] != 0:
@@ -31,7 +33,7 @@ class Game(AlphaZero.Game.Game):
             return True
 
         right = 0
-        while j + right + 1 < 19 and self.chessBoard[0][i][j + right + 1][playerColor] != 0:
+        while j + right + 1 < self.row and self.chessBoard[0][i][j + right + 1][playerColor] != 0:
             right += 1
         if left + right >= 4:
             return True
@@ -43,7 +45,7 @@ class Game(AlphaZero.Game.Game):
             return True
 
         down = 0
-        while i + down + 1 < 19 and self.chessBoard[0][i + down + 1][j][playerColor] != 0:
+        while i + down + 1 < self.column and self.chessBoard[0][i + down + 1][j][playerColor] != 0:
             down += 1
         if up + down >= 4:
             return True
@@ -55,26 +57,26 @@ class Game(AlphaZero.Game.Game):
             return True
 
         rightDown = 0
-        while j + rightDown + 1 < 19 and i + rightDown + 1 < 19 and self.chessBoard[0][i + rightDown + 1][j + rightDown + 1][playerColor] != 0:
+        while j + rightDown + 1 < self.row and i + rightDown + 1 < self.column and self.chessBoard[0][i + rightDown + 1][j + rightDown + 1][playerColor] != 0:
             rightDown += 1
         if leftUp + rightDown >= 4:
             return True
 
         leftDown = 0
-        while j - leftDown - 1 >= 0 and i + leftDown + 1 < 19 and self.chessBoard[0][i + leftDown + 1][j - leftDown - 1][playerColor] != 0:
+        while j - leftDown - 1 >= 0 and i + leftDown + 1 < self.column and self.chessBoard[0][i + leftDown + 1][j - leftDown - 1][playerColor] != 0:
             leftDown += 1
         if leftDown >= 4:
             return True
 
         rightUp = 0
-        while j + rightUp + 1 < 19 and i - rightUp - 1 >= 0 and self.chessBoard[0][i - rightUp - 1][j + rightUp + 1][playerColor] != 0:
+        while j + rightUp + 1 < self.row and i - rightUp - 1 >= 0 and self.chessBoard[0][i - rightUp - 1][j + rightUp + 1][playerColor] != 0:
             rightUp += 1
         if leftDown + rightUp >= 4:
             return True
 
     def checkBoard(self):
-        for i in range(19):
-            for j in range(19):
+        for i in range(self.column):
+            for j in range(self.row):
                 assert self.chessBoard[0][i][j][2] == 0
                 assert self.chessBoard[1][i][j][2] == 1
                 assert self.chessBoard[0][i][j][0] == self.chessBoard[1][i][j][0]
@@ -93,8 +95,8 @@ class Game(AlphaZero.Game.Game):
         if self.actions:
             return self.actions
         actions = []
-        for i in range(19):
-            for j in range(19):
+        for i in range(self.column):
+            for j in range(self.row):
                 actions.append((i, j))
         self.actions = actions
         return actions
@@ -102,7 +104,7 @@ class Game(AlphaZero.Game.Game):
     def takeAction(self, action):
         self.chessBoard[0][action[0]][action[1]][self.activeColor] = 1
         self.chessBoard[1][action[0]][action[1]][self.activeColor] = 1
-        self.policyMask[action[0]*19+action[1]] = 0
+        self.policyMask[action[0]*self.row+action[1]] = 0
         if self.isSerialFive(action[0], action[1]):
             self.winner = self.activeColor
         self.activeColor ^= 1
@@ -116,13 +118,13 @@ class Game(AlphaZero.Game.Game):
         self.activeColor ^= 1
         self.chessBoard[0][action[0]][action[1]][self.activeColor] = 0
         self.chessBoard[1][action[0]][action[1]][self.activeColor] = 0
-        self.policyMask[action[0]*19+action[1]] = 1
+        self.policyMask[action[0]*self.row+action[1]] = 1
         self.winner = None
 
     def reset(self):
         self.chessBoard.fill(0)
-        for i in range(19):
-            for j in range(19):
+        for i in range(self.column):
+            for j in range(self.row):
                 self.chessBoard[1][i][j][2] = 1
         self.policyMask.fill(1)
         self.historyActions = []
@@ -152,5 +154,5 @@ class Game(AlphaZero.Game.Game):
     # get network input planes, to filter legal actions
     def getInputPolicyMask(self):
         if self.isTerminated():
-            return np.zeros(19*19, dtype=np.int8)
+            return np.zeros(self.row*self.column, dtype=np.int8)
         return self.policyMask.copy()
